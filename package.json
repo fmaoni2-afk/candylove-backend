@@ -1,0 +1,59 @@
+const express = require('express');
+const cors = require('cors');
+const { MercadoPagoConfig, Payment } = require('mercadopago');
+
+const app = express();
+
+// Permite requisições do seu frontend da Netlify
+app.use(cors());
+app.use(express.json());
+
+// Configura o Mercado Pago com o Access Token guardado nas variáveis de ambiente
+const client = new MercadoPagoConfig({ 
+    accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN 
+});
+const payment = new Payment(client);
+
+// Rota para gerar a cobrança PIX
+app.post('/api/gerar-pix', async (req, res) => {
+    try {
+        const { valor, email, nome } = req.body;
+
+        const body = {
+            transaction_amount: Number(valor),
+            description: 'Compra Candy Love',
+            payment_method_id: 'pix',
+            payer: {
+                email: email,
+                first_name: nome
+            }
+        };
+
+        const response = await payment.create({ body });
+
+        res.json({
+            id: response.id,
+            qr_code: response.point_of_interaction.transaction_data.qr_code,
+            qr_code_base64: response.point_of_interaction.transaction_data.qr_code_base64
+        });
+    } catch (error) {
+        console.error('Erro ao gerar PIX:', error);
+        res.status(500).json({ error: 'Erro ao conectar com o serviço de pagamento.' });
+    }
+});
+
+// Rota para verificar o status do pagamento
+app.get('/api/status-pix/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const response = await payment.get({ id });
+        res.json({ status: response.status });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao verificar status' });
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Servidor a rodar na porta ${PORT}`);
+});
